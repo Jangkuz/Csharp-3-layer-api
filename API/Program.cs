@@ -1,4 +1,13 @@
+using Repository.Implements;
+using Repository.Interfaces;
+using Repository.UnitOfWork;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddScoped(typeof(IGenericRepository<,>), typeof(GenericRepository<,>));
+
+
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle

@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore.Query;
 using Repository.Entities;
+using Repository.Paging;
 using System.Linq.Expressions;
 
 namespace Repository.Interfaces;
@@ -56,6 +57,15 @@ public interface IGenericRepository<TEntity, TEntityId>
     TEntity? GetByIdAsDetached(TEntityId id);
 
     /// <summary>
+    ///     Return a list of entity of type <typeparamref name="TEntity"/>.
+    /// </summary>
+    /// <returns>
+    ///     The asynchronous task represent the operation.
+    ///     The result will be the enumeration list of existing entity of type <typeparamref name="TEntity"/>.
+    /// </returns>
+    Task<IEnumerable<TEntity>> GetAllAsync(bool noTracking = true);
+
+    /// <summary>
     ///     <para>
     ///         Get all existing entities of type <typeparamref name="TEntity"/> with optional navigation properties in a 
     ///         <see cref="ICollection{T}"/>.
@@ -66,32 +76,10 @@ public interface IGenericRepository<TEntity, TEntityId>
     /// <returns>
     ///     all existing records of type <typeparamref name="TEntity"/> with requested navigational properties included
     /// </returns>
-    Task<ICollection<TEntity>> GetAllAsync(bool noTracking = true, params Expression<Func<TEntity, object>>[] includes);
-
-    /// <summary>
-    ///     <para>
-    ///         Get the first entity that match the <paramref name="filter"/> and return that entity with the 
-    ///         included <paramref name="includeProperties"/> if found.
-    ///     </para>
-    /// </summary>
-    /// <param name="filter"></param>
-    /// <param name="includeProperties"></param>
-    /// <returns>
-    ///     The asynchronous task represent the search operation.
-    ///     The result will be the <typeparamref name="TEntity"/> entity with included properties if found, else null.
-    /// </returns>
-    Task<TEntity?> GetByConditionAsync(
-        Expression<Func<TEntity, bool>> filter,
-        Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? includeProperties = null);
-
-    /// <summary>
-    ///     Return a list of entity of type <typeparamref name="TEntity"/>.
-    /// </summary>
-    /// <returns>
-    ///     The asynchronous task represent the operation.
-    ///     The result will be the enumeration list of existing entity of type <typeparamref name="TEntity"/>.
-    /// </returns>
-    Task<IEnumerable<TEntity>> ListAsync();
+    Task<ICollection<TEntity>> GetAllAsync(
+        Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includeProperties,
+        bool noTracking = true
+        );
 
     /// <summary>
     ///     Return a list of entity of type <typeparamref name="TEntity"/> that match the <paramref name="filter"/>.
@@ -103,9 +91,11 @@ public interface IGenericRepository<TEntity, TEntityId>
     ///     The asynchronous task represent the operation.
     ///     The result will be the enumeration list of existing entity of type <typeparamref name="TEntity"/>.
     /// </returns>
-    Task<IEnumerable<TEntity>> ListAsync(
+    Task<IEnumerable<TEntity>> GetAllAsync(
         Expression<Func<TEntity, bool>> filter,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, bool noTracking = true);
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
+        bool noTracking = true
+        );
 
     /// <summary>
     ///     Return a list of entity of type <typeparamref name="TEntity"/> with <paramref name="includeProperties"/> included.
@@ -119,10 +109,31 @@ public interface IGenericRepository<TEntity, TEntityId>
     ///     The asynchronous task represent the operation.
     ///     The result will be the enumeration list of existing entity of type <typeparamref name="TEntity"/>.
     /// </returns>
-    Task<IEnumerable<TEntity>> ListAsync(
+    Task<IEnumerable<TEntity>> GetAllAsync(
         Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includeProperties,
-        Expression<Func<TEntity, bool>>? filter = null,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        Expression<Func<TEntity, bool>>? filter,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
+        bool noTracking = true
+    );
+
+    /// <summary>
+    ///     Return a list of entity of type <typeparamref name="TEntity"/> with <paramref name="includeProperties"/> included.
+    ///     Optionally the operation will also filter the list by using the <paramref name="filter"/> 
+    ///     and sort the list based on the entity <paramref name="orderBy"/> property.
+    /// </summary>
+    /// <param name="includeProperties">The included property for the entity fo type <typeparamref name="TEntity"/></param>
+    /// <param name="filter">The filter criteria for the entity searching progress</param>
+    /// <param name="orderBy">The property which the list will be sorted by their value.</param>
+    /// <returns>
+    ///     The asynchronous task represent the operation.
+    ///     The result will be the enumeration list of existing entity of type <typeparamref name="TEntity"/>.
+    /// </returns>
+    Task<IEnumerable<TEntity>> GetAllAsync(
+        int pageNumber,
+        int pageSize,
+        Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includeProperties,
+        Expression<Func<TEntity, bool>>? filter,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
         bool noTracking = true
     );
 
@@ -144,6 +155,23 @@ public interface IGenericRepository<TEntity, TEntityId>
     /// <param name="match">matching criteria function</param>
     /// <returns>The task represent the asynchronous operation. The task result is the entity if found, else null</returns>
     Task<TEntity?> FindAsync(Expression<Func<TEntity, bool>> match);
+
+
+    /// <summary>
+    ///     <para>
+    ///         Get the first entity that match the <paramref name="filter"/> and return that entity with the 
+    ///         included <paramref name="includeProperties"/> if found.
+    ///     </para>
+    /// </summary>
+    /// <param name="filter"></param>
+    /// <param name="includeProperties"></param>
+    /// <returns>
+    ///     The asynchronous task represent the search operation.
+    ///     The result will be the <typeparamref name="TEntity"/> entity with included properties if found, else null.
+    /// </returns>
+    Task<TEntity?> FindAsync(
+        Expression<Func<TEntity, bool>> filter,
+        Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? includeProperties = null);
 
     /// <summary>
     ///     <para>
@@ -220,5 +248,17 @@ public interface IGenericRepository<TEntity, TEntityId>
     Task<int> CountAsync();
     Task DeleteRange(IEnumerable<TEntity> entities);
 
-    //Task<PaginationResult<TEntity>> AsPaginated(int page, int pageSize, Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includes = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null);
+    Task<PaginationResult<TEntity>> AsPaginatedInRAM(
+    int page,
+    int pageSize,
+    Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includes = null,
+    Expression<Func<TEntity, bool>>? filter = null,
+    Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null);
+
+    Task<PaginationResult<TEntity>> AsPaginated(
+        int page,
+        int pageSize,
+        Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includes = null,
+        Expression<Func<TEntity, bool>>? filter = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null);
 }

@@ -1,9 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Query;
-using Repository;
 using Repository.Entities;
 using Repository.Interfaces;
+using Repository.Paging;
 using System.Linq.Expressions;
 
 namespace Repository.Implements;
@@ -19,24 +19,6 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         _context = context;
     }
 
-    public async Task<ICollection<TEntity>> GetAllAsync(
-        bool noTracking = true,
-        params Expression<Func<TEntity, object>>[] includes)
-    {
-        IQueryable<TEntity> query = _context.Set<TEntity>();
-
-        if (noTracking)
-        {
-            query = query.AsNoTracking();
-        }
-
-        foreach (var include in includes)
-        {
-            query = query.Include(include);
-        }
-
-        return await query.ToListAsync();
-    }
 
     public async Task<TEntity> AddAsync(TEntity entity)
     {
@@ -88,6 +70,20 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         return await _context.Set<TEntity>().SingleOrDefaultAsync(match);
     }
 
+    public async Task<TEntity?> FindAsync(
+    Expression<Func<TEntity, bool>> filter,
+    Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? includeProperties = null)
+    {
+        IQueryable<TEntity> query = _context.Set<TEntity>();
+
+        if (includeProperties != null)
+        {
+            query = includeProperties(query);
+        }
+
+        return await query.FirstOrDefaultAsync(filter);
+    }
+
     public IQueryable<TEntity> GetAll()
     {
         return _context.Set<TEntity>();
@@ -130,28 +126,39 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         return await _context.Set<TEntity>().ToListAsync();
     }
 
-    public async Task<IEnumerable<TEntity>> ListAsync()
-    {
-        return await _context.Set<TEntity>().ToListAsync();
-    }
-    public async Task<TEntity?> GetByConditionAsync(
-        Expression<Func<TEntity, bool>> filter,
-        Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object>>? includeProperties = null)
+    public async Task<IEnumerable<TEntity>> GetAllAsync(bool noTracking = true)
     {
         IQueryable<TEntity> query = _context.Set<TEntity>();
+        if (noTracking)
+        {
+            query.AsNoTracking();
+        }
+        return await query.ToListAsync();
+    }
+
+    public async Task<ICollection<TEntity>> GetAllAsync(
+        Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includeProperties,
+        bool noTracking = true
+        )
+    {
+        IQueryable<TEntity> query = _context.Set<TEntity>();
+
+        if (noTracking)
+        {
+            query = query.AsNoTracking();
+        }
 
         if (includeProperties != null)
         {
             query = includeProperties(query);
         }
 
-        return await query.FirstOrDefaultAsync(filter);
+        return await query.ToListAsync();
     }
 
-
-    public async Task<IEnumerable<TEntity>> ListAsync(
-        Expression<Func<TEntity, bool>>? filter = null,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+    public async Task<IEnumerable<TEntity>> GetAllAsync(
+        Expression<Func<TEntity, bool>>? filter,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
         bool noTracking = true
     )
     {
@@ -175,10 +182,10 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         return await query.ToListAsync();
     }
 
-    public async Task<IEnumerable<TEntity>> ListAsync(
+    public async Task<IEnumerable<TEntity>> GetAllAsync(
         Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includeProperties,
-        Expression<Func<TEntity, bool>>? filter = null,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
+        Expression<Func<TEntity, bool>>? filter,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
         bool noTracking = true
     )
     {
@@ -203,6 +210,44 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         {
             query = orderBy(query);
         }
+        return await query.ToListAsync();
+    }
+
+    public async Task<IEnumerable<TEntity>> GetAllAsync(int pageNumber, int pageSize, Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includeProperties, Expression<Func<TEntity, bool>>? filter = null, Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null, bool noTracking = true)
+    {
+        IQueryable<TEntity> query = _context.Set<TEntity>();
+
+        if (noTracking)
+        {
+            query = query.AsNoTracking();
+        }
+
+        if (filter != null)
+        {
+            query = query.Where(filter);
+        }
+
+        if (includeProperties != null)
+        {
+            query = includeProperties(query);
+        }
+
+        if (orderBy != null)
+        {
+            query = orderBy(query);
+        }
+        else
+        {
+            query = query.OrderBy(t => t.Id);
+        }
+
+        if (pageNumber >= 1 && pageSize >= 1)
+        {
+            query = query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize);
+        }
+
         return await query.ToListAsync();
     }
 
@@ -223,26 +268,56 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         return Task.CompletedTask;
     }
 
-    //public async Task<PaginationResult<TEntity>> AsPaginated(
-    //    int page,
-    //    int pageSize,
-    //    Expression<Func<TEntity, bool>>? filter = null,
-    //    Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includes = null,
-    //    Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
-    //{
-    //    IEnumerable<TEntity> items = await ListAsync(includeProperties: includes, filter: filter, orderBy: orderBy);
+    public async Task<PaginationResult<TEntity>> AsPaginatedInRAM(
+    int page,
+    int pageSize,
+    Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includes = null,
+    Expression<Func<TEntity, bool>>? filter = null,
+    Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
 
-    //    Console.WriteLine(items.Count());
+        IEnumerable<TEntity> items = await GetAllAsync(includeProperties: includes, filter: filter, orderBy: orderBy);
 
-    //    if (page < 1) page = 1;
-    //    if (pageSize < 1) pageSize = 10;
+        Console.WriteLine(items.Count());
 
-    //    return new PaginationResult<TEntity>
-    //    {
-    //        Content = items.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
-    //        ItemAmount = items.Count(),
-    //        CurrentPage = page,
-    //        PageSize = pageSize,
-    //    };
-    //}
+
+        return new PaginationResult<TEntity>
+        {
+            Content = items.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
+            ItemAmount = items.Count(),
+            CurrentPage = page,
+            PageSize = pageSize,
+        };
+    }
+
+    public async Task<PaginationResult<TEntity>> AsPaginated(
+        int page,
+        int pageSize,
+        Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includes = null,
+        Expression<Func<TEntity, bool>>? filter = null,
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
+
+        IEnumerable<TEntity> items = await GetAllAsync(
+            pageNumber: page,
+            pageSize: pageSize,
+            includeProperties: includes,
+            filter: filter,
+            orderBy: orderBy);
+
+        Console.WriteLine(items.Count());
+
+        return new PaginationResult<TEntity>
+        {
+            Content = items.ToList(),
+            ItemAmount = items.Count(),
+            CurrentPage = page,
+            PageSize = pageSize,
+        };
+    }
+
 }

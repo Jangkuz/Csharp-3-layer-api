@@ -1,5 +1,5 @@
-﻿using Repository.Entities;
-using Repository.Interfaces;
+﻿using DataAccessLayer.Interfaces;
+using Repository.Entities;
 
 namespace Repository.UnitOfWork;
 

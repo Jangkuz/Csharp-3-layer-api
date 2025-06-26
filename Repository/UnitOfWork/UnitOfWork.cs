@@ -1,8 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore.Storage;
+﻿using DataAccessLayer.Interfaces;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Repository;
 using Repository.Entities;
-using Repository.Interfaces;
 
 namespace Repository.UnitOfWork;
 

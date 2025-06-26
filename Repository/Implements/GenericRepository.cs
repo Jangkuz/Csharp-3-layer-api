@@ -1,8 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using DataAccessLayer.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Query;
 using Repository.Entities;
-using Repository.Interfaces;
 using Repository.Paging;
 using System.Linq.Expressions;
 
@@ -19,26 +19,21 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         _context = context;
     }
 
-
     public async Task<TEntity> AddAsync(TEntity entity)
     {
         EntityEntry<TEntity> entityTracker = await _context.Set<TEntity>().AddAsync(entity);
         return entityTracker.Entity;
     }
 
-    public int Count()
+    public async Task AddRangeAsync(IEnumerable<TEntity> entities)
     {
-        return _context.Set<TEntity>().Count();
+        await _context.AddRangeAsync(entities);
     }
 
-    public async Task<int> CountAsync()
+    public TEntity Update(TEntity entity)
     {
-        return await _context.Set<TEntity>().CountAsync();
-    }
-
-    public void Delete(TEntity entity)
-    {
-        _context.Set<TEntity>().Remove(entity);
+        EntityEntry<TEntity> entityTracker = _context.Set<TEntity>().Update(entity);
+        return entityTracker.Entity;
     }
 
     public void Delete(TEntityId id)
@@ -48,6 +43,17 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         {
             _context.Set<TEntity>().Remove(entity);
         }
+    }
+
+    public void Delete(TEntity entity)
+    {
+        _context.Set<TEntity>().Remove(entity);
+    }
+
+    public Task DeleteRange(IEnumerable<TEntity> entities)
+    {
+        _context.Set<TEntity>().RemoveRange(entities);
+        return Task.CompletedTask;
     }
 
     public bool Exists(TEntityId id)
@@ -84,24 +90,31 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         return await query.FirstOrDefaultAsync(filter);
     }
 
-    public IQueryable<TEntity> GetAll()
+    public int Count()
     {
-        return _context.Set<TEntity>();
+        return _context.Set<TEntity>().Count();
+    }
+
+    public async Task<int> CountAsync()
+    {
+        return await _context.Set<TEntity>().CountAsync();
+    }
+
+    public async Task<int> CountAsync(Expression<Func<TEntity, bool>>? filter)
+    {
+        IQueryable<TEntity> query = _context.Set<TEntity>();
+
+        if (filter != null)
+        {
+            query = query.Where(filter);
+        }
+
+        return await query.CountAsync();
     }
 
     public TEntity? GetById(TEntityId id)
     {
         return _context.Set<TEntity>().Find(id);
-    }
-
-    public TEntity? GetByIdAsDetached(TEntityId id)
-    {
-        var entity = _context.Set<TEntity>().Find(id);
-        if (entity != null)
-        {
-            _context.Entry(entity).State = EntityState.Detached;
-        }
-        return entity;
     }
 
     public async Task<TEntity?> GetByIdAsync(TEntityId id)
@@ -121,10 +134,25 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         return await query.FirstOrDefaultAsync(x => x.Id.Equals(id));
     }
 
+    public TEntity? GetByIdAsDetached(TEntityId id)
+    {
+        var entity = _context.Set<TEntity>().Find(id);
+        if (entity != null)
+        {
+            _context.Entry(entity).State = EntityState.Detached;
+        }
+        return entity;
+    }
+
     public async Task<IReadOnlyCollection<TEntity>> ToListAsReadOnly()
     {
         return await _context.Set<TEntity>().ToListAsync();
     }
+
+    //public IQueryable<TEntity> GetAll()
+    //{
+    //    return _context.Set<TEntity>();
+    //}
 
     public async Task<IEnumerable<TEntity>> GetAllAsync(bool noTracking = true)
     {
@@ -251,47 +279,6 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         return await query.ToListAsync();
     }
 
-    public TEntity Update(TEntity entity)
-    {
-        EntityEntry<TEntity> entityTracker = _context.Set<TEntity>().Update(entity);
-        return entityTracker.Entity;
-    }
-
-    public async Task AddRangeAsync(IEnumerable<TEntity> entities)
-    {
-        await _context.AddRangeAsync(entities);
-    }
-
-    public Task DeleteRange(IEnumerable<TEntity> entities)
-    {
-        _context.Set<TEntity>().RemoveRange(entities);
-        return Task.CompletedTask;
-    }
-
-    public async Task<PaginationResult<TEntity>> AsPaginatedInRAM(
-    int page,
-    int pageSize,
-    Func<IQueryable<TEntity>, IIncludableQueryable<TEntity, object?>>? includes = null,
-    Expression<Func<TEntity, bool>>? filter = null,
-    Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
-    {
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 10;
-
-        IEnumerable<TEntity> items = await GetAllAsync(includeProperties: includes, filter: filter, orderBy: orderBy);
-
-        Console.WriteLine(items.Count());
-
-
-        return new PaginationResult<TEntity>
-        {
-            Content = items.Skip((page - 1) * pageSize).Take(pageSize).ToList(),
-            ItemAmount = items.Count(),
-            CurrentPage = page,
-            PageSize = pageSize,
-        };
-    }
-
     public async Task<PaginationResult<TEntity>> AsPaginated(
         int page,
         int pageSize,
@@ -301,6 +288,8 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 10;
+
+        int totalItem = await CountAsync(filter);
 
         IEnumerable<TEntity> items = await GetAllAsync(
             pageNumber: page,
@@ -314,9 +303,9 @@ public class GenericRepository<TEntity, TEntityId> : IGenericRepository<TEntity,
         return new PaginationResult<TEntity>
         {
             Content = items.ToList(),
-            ItemAmount = items.Count(),
             CurrentPage = page,
             PageSize = pageSize,
+            TotalItemCount = totalItem
         };
     }
 

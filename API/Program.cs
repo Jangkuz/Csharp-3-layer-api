@@ -1,5 +1,5 @@
+using DataAccessLayer.Interfaces;
 using Repository.Implements;
-using Repository.Interfaces;
 using Repository.UnitOfWork;
 
 var builder = WebApplication.CreateBuilder(args);
